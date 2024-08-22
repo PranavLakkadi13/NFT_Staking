@@ -45,7 +45,7 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
     error NFTStaking__IncorrectTokenIdToStake();
     error NFTStaking__InvalidArraySize();
     error NFTStaking__AlreadyStaked();
-
+    error NFTStaking__IncorrectTokenIdToWithdraw();
 
 
     ///////////////////////////////////////////////////////////////////////
@@ -87,8 +87,13 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
     /////////////////  Core Logic Functions  //////////////////////////////
     ///////////////////////////////////////////////////////////////////////
 
-
-    function stake_single_token(address nftContract, uint256 tokenId) external whenNotPaused {
+    /**
+     * @dev The function is used to stake a single token
+     * @param nftContract the address of the NFT contract
+     * @param tokenId the token id to stake
+     * @notice The user can only stake the token only if the contract is not paused
+     */
+    function stake_single_token(address nftContract, uint256 tokenId) public whenNotPaused {
         if (nftContract != address(s_nftToken)) {
             revert NFTStaking__IncorrectNFTToken();
         }
@@ -110,48 +115,44 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
     }
 
 
+    /**
+     * @dev The function is used to stake multiple tokens at once it internally calls the stake_single_token function
+     * @param nftContract the address of the nft contract
+     * @param tokenIds the array of the token ids to stake
+     * @notice The user can only stake the token only if the contract is not paused
+     */
     function stake_Multiple_Tokens(address nftContract, uint256[] memory tokenIds) external whenNotPaused {
-        if (nftContract != address(s_nftToken)) {
-            revert NFTStaking__IncorrectNFTToken();
-        }
-        if (tokenIds.length == 0) {
-            revert NFTStaking__InvalidArraySize();
-        }
-
         for (uint256 i = 0; i < tokenIds.length; i++) {
-            
-            Stake storage userStake = stakes[msg.sender];
-
-            if (userStake.stateData[i].DepositTime > 0 && userStake.stateData[i].isWithdrawn == false) {
-                revert NFTStaking__AlreadyStaked();
-            }
-            
-            IERC721(nftContract).transferFrom(msg.sender, address(this), i);
-
-            
-            userStake.tokenIds.push(i);
-            userStake.stateData[i].DepositTime = block.number;
-            userStake.stateData[i].isWithdrawn = false;
-            userStake.stateData[i].isUnbonding = false;
-
-            emit Staked(msg.sender, i);
-
+            stake_single_token(nftContract, tokenIds[i]);
         }
-
     }
 
-    // function unstake_Multiple_Tokens(uint256[] memory tokenIds) external whenNotPaused {
-    //     Stake storage userStake = stakes[msg.sender];
-    //     require(userStake.tokenIds.length >= tokenIds.length, "Invalid unstake amount");
 
-    //     for (uint256 i = 0; i < tokenIds.length; i++) {
-    //         IERC721(s_nftToken).transferFrom(address(this), msg.sender, tokenIds[i]);
-    //         _removeTokenFromStake(userStake.tokenIds, tokenIds[i]);
-    //         userStake.stateData[i].isUnbonding = true;
-    //     }
+    /**
+     * @dev The function is used to unstake a single token
+     * @param tokenId the token id to unstake
+     * @notice The user can only unstake the token only if the contract is not paused
+     */
+    function unstake_single_token(uint256 tokenId) public whenNotPaused {
+        
+        if (stakes[msg.sender].stateData[tokenId].DepositTime == 0) {
+            revert NFTStaking__IncorrectTokenIdToWithdraw();
+        }
 
-    //     emit Unstaked(msg.sender, tokenIds);
-    // }
+        Stake storage userStake = stakes[msg.sender];
+
+        userStake.stateData[tokenId].isUnbonding = true;
+        userStake.stateData[tokenId].unBondingBlockNumber = block.number + s_unbondingPeriod;
+        userStake.stateData[tokenId].withDrawnTime = block.number;
+
+        emit Unstaked(msg.sender, tokenId);
+    }
+
+    function unstake_Multiple_Tokens(uint256[] memory tokenIds) external whenNotPaused {
+        for (uint256 i = 0; i < tokenIds.length; i++) {
+            unstake_single_token(tokenIds[i]);
+        }
+    }
 
     // function withdrawNFTs(address nftContract) external {
     //     Stake storage userStake = stakes[msg.sender][nftContract];
@@ -213,6 +214,9 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
         s_rewardClaimDelay = _rewardClaimDelay;
     }
 
+    function setRewardToken(IERC20 _rewardToken) external onlyOwner {
+        s_rewardToken = _rewardToken;
+    }
 
     function pause() external onlyOwner {
         _pause();
