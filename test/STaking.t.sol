@@ -49,7 +49,8 @@ contract STakingTest is Test {
         assertEq(staking.getRewardPerBlock(), 1e10);
         assertEq(staking.getUnbondingPeriod(), 1000);
         assertEq(staking.getRewardClaimDelay(), 1000);
-        nftToken1.tokenURI(0);
+        assertEq(nftToken1.tokenURI(0), "TOKEN10");
+        assertEq(nftToken2.tokenURI(0), "TOKEN20");
     }
 
     function teststakes() public {
@@ -201,6 +202,84 @@ contract STakingTest is Test {
         vm.startPrank(owner);
         staking.stake_single_token(address(nftToken1), 0);
         staking.pause();
+        vm.expectRevert();
+        staking.unstake_single_token(0);
+        vm.stopPrank();
+    }
+
+    function testUnstakeMultipleTokens() public {
+        vm.startPrank(owner);
+        uint256[] memory tokenIds = new uint256[](3);
+        tokenIds[0] = 0;
+        tokenIds[1] = 1;
+        tokenIds[2] = 2;
+        staking.stake_Multiple_Tokens(address(nftToken1), tokenIds);
+        staking.unstake_Multiple_Tokens(tokenIds);
+        vm.stopPrank();
+        assertEq(staking.getTokensStaked(owner).length, 3);
+        assertEq(staking.getStakeBlockNumberOfToken(owner, 0), 1);
+        assertEq(staking.getStakeBlockNumberOfToken(owner, 1), 1);
+        assertEq(staking.getStakeBlockNumberOfToken(owner, 2), 1);
+        assertEq(staking.getTokenIfClaimed(owner, 0), false);
+        assertEq(staking.getTokenIfClaimed(owner, 1), false);
+        assertEq(staking.getTokenIfClaimed(owner, 2), false);
+        assertEq(staking.getTokenIfUnbonding(owner, 0), true);
+        assertEq(staking.getTokenIfUnbonding(owner, 1), true);
+        assertEq(staking.getTokenIfUnbonding(owner, 2), true);
+        assertEq(staking.getWithdrawTimeOfSTakedToken(owner, 0), 1);
+        assertEq(staking.getWithdrawTimeOfSTakedToken(owner, 1), 1);
+        assertEq(staking.getWithdrawTimeOfSTakedToken(owner, 2), 1);
+    }
+
+    function testUnstakeMultipleTokensFailIfContractPaused() public {
+        vm.startPrank(owner);
+        uint256[] memory tokenIds = new uint256[](3);
+        tokenIds[0] = 0;
+        tokenIds[1] = 1;
+        tokenIds[2] = 2;
+        staking.stake_Multiple_Tokens(address(nftToken1), tokenIds);
+        staking.pause();
+        vm.expectRevert();
+        staking.unstake_Multiple_Tokens(tokenIds);
+        vm.stopPrank();
+    }
+
+    function testEventEmissionWhenWithdrawn() public {
+        vm.startPrank(owner);
+        uint256[] memory tokenIds = new uint256[](3);
+        tokenIds[0] = 0;
+        tokenIds[1] = 1;
+        tokenIds[2] = 2;
+        staking.stake_Multiple_Tokens(address(nftToken1), tokenIds);
+        vm.expectEmit(true, false, true, false);
+        emit Unstaked(owner, 0);
+        emit Unstaked(owner, 1);
+        emit Unstaked(owner, 2);
+        staking.unstake_Multiple_Tokens(tokenIds);
+        vm.stopPrank();
+    }
+
+    function testPartiallyWIthdrawnTokensCantBeReSTakedUntillFullyWIthdraw()  public {
+        vm.startPrank(owner);
+        uint256[] memory tokenIds = new uint256[](3);
+        tokenIds[0] = 0;
+        tokenIds[1] = 1;
+        tokenIds[2] = 2;
+        staking.stake_Multiple_Tokens(address(nftToken1), tokenIds);
+        staking.unstake_single_token(0);
+        vm.expectRevert();
+        staking.stake_single_token(address(nftToken1), 0);
+        vm.stopPrank();
+    }
+
+    function testShouldRevertIfUnstakingAalreadyUnstakedToken() public {
+        vm.startPrank(owner);
+        uint256[] memory tokenIds = new uint256[](3);
+        tokenIds[0] = 0;
+        tokenIds[1] = 1;
+        tokenIds[2] = 2;
+        staking.stake_Multiple_Tokens(address(nftToken1), tokenIds);
+        staking.unstake_single_token(0);
         vm.expectRevert();
         staking.unstake_single_token(0);
         vm.stopPrank();

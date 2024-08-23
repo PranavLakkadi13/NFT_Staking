@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.25;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -46,7 +46,7 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
     error NFTStaking__InvalidArraySize();
     error NFTStaking__AlreadyStaked();
     error NFTStaking__IncorrectTokenIdToWithdraw();
-
+    error NFTStaking__IncorrectWithdrawOfAlreadyUnstakedToken(uint256 tokenId);
 
     ///////////////////////////////////////////////////////////////////////
     /////////////////  Events   ///////////////////////////////////////////
@@ -135,11 +135,16 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
      */
     function unstake_single_token(uint256 tokenId) public whenNotPaused {
         
-        if (stakes[msg.sender].stateData[tokenId].DepositTime == 0) {
+        Stake storage userStake = stakes[msg.sender];
+
+        if (userStake.stateData[tokenId].isUnbonding == true) {
+            revert NFTStaking__IncorrectWithdrawOfAlreadyUnstakedToken(tokenId);
+        }
+        
+        if (userStake.stateData[tokenId].DepositTime == 0) {
             revert NFTStaking__IncorrectTokenIdToWithdraw();
         }
 
-        Stake storage userStake = stakes[msg.sender];
 
         userStake.stateData[tokenId].isUnbonding = true;
         userStake.stateData[tokenId].unBondingBlockNumber = block.number + s_unbondingPeriod;
@@ -148,6 +153,11 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
         emit Unstaked(msg.sender, tokenId);
     }
 
+    /**
+     * @dev The function is used to unstake multiple tokens at once it internally calls the unstake_single_token function
+     * @param tokenIds the array of the token ids to unstake
+     * @notice The user can only unstake the token only if the contract is not paused
+     */
     function unstake_Multiple_Tokens(uint256[] memory tokenIds) external whenNotPaused {
         for (uint256 i = 0; i < tokenIds.length; i++) {
             unstake_single_token(tokenIds[i]);
@@ -199,29 +209,64 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
     ///////////////////////////////////////////////////////////////////////
     /////////////////  Only Owner Functions  //////////////////////////////
     ///////////////////////////////////////////////////////////////////////
-
+ 
+    /**
+     * @dev The function is used to upgrade the contract The addressed in stored a predetermined location to prevent any possible 
+     *      storage collision as per EIP1967 standard
+     * @param newImplementation the address of the new implementation
+     * @notice Only the owner can call this function
+     */
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
+    /**
+     * @dev The function is used to update the reward per block
+     * @param _rewardPerBlock the reward per block
+     * @notice Only the owner can call this function
+     */
     function setRewardPerBlock(uint256 _rewardPerBlock) external onlyOwner {
         s_rewardPerBlock = _rewardPerBlock;
     }
 
+    /**
+     * @dev The function is used to update the unbonding period
+     * @param _unbondingPeriod the unbonding period
+     * @notice Only the owner can call this function
+     */
     function setUnbondingPeriod(uint256 _unbondingPeriod) external onlyOwner {
         s_unbondingPeriod = _unbondingPeriod;
     }
 
+    /**
+     * @dev The function is used to update the reward claim delay
+     * @param _rewardClaimDelay the reward claim delay
+     * @notice Only the owner can call this function
+     */
     function setRewardClaimDelay(uint256 _rewardClaimDelay) external onlyOwner {
         s_rewardClaimDelay = _rewardClaimDelay;
     }
 
+    /**
+     * @dev The function is used to update the reward token
+     * @param _rewardToken the reward token
+     * @notice Only the owner can call this function
+     */
     function setRewardToken(IERC20 _rewardToken) external onlyOwner {
         s_rewardToken = _rewardToken;
     }
 
+    /**
+     * @dev This function is used to Pause the contract since it is upgreadable it is stored in a predetermined locaton to prevent 
+     *      any possible storage collsion with the new implementation
+     * @notice Only the owner can call this function
+     */
     function pause() external onlyOwner {
         _pause();
     }
 
+    /**
+     * @dev This function is used to Unpause the contract 
+     * @notice Only the owner can call this function
+     */
     function unpause() external onlyOwner {
         _unpause();
     }
@@ -231,43 +276,87 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
     /////////////////  Getter Functions  /////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
 
+    /**
+     * @dev The function is used to get the reward token
+     * @return the address of the reward token
+     */
     function getRewardToken() external view returns (address) {
         return address(s_rewardToken);
     }
 
+    /**
+     * @dev The function is used to get the NFT token thats accepted by the contract
+     * @return the address of the NFT token
+     */
     function getNftToken() external view returns (address) {
         return address(s_nftToken);
     }
 
+    /**
+     * @dev The function is used to get the reward per block
+     * @return the reward per block
+     */
     function getRewardPerBlock() external view returns (uint256) {
         return s_rewardPerBlock;
     }
 
+    /**
+     * @dev The function is used to get the unbonding period
+     * @return the unbonding period
+     */
     function getUnbondingPeriod() external view returns (uint256) {
         return s_unbondingPeriod;
     }
 
+    /**
+     * @dev The function is used to get the reward claim delay
+     * @return the reward claim delay
+     */
     function getRewardClaimDelay() external view returns (uint256) {
         return s_rewardClaimDelay;
     }
 
-
+    /**
+     * @dev The function is used to get the total number of tokens staked by a user
+     * @param user the address of the user
+     * @return the array of the token ids staked by the user
+     */
     function getTokensStaked(address user) external view returns (uint256[] memory) {
         return stakes[user].tokenIds;
     }
 
+    /**
+     * @dev The function is used to get the total number of tokens staked by a user
+     * @param user the address of the user
+     * @return the array of the token ids staked by the user
+     */
     function getTokenIfClaimed(address user, uint256 tokenId) external view returns (bool) {
         return stakes[user].stateData[tokenId].isWithdrawn;
     }
 
+    /**
+     * @dev The function is used to get the total number of tokens staked by a user
+     * @param user the address of the user
+     * @return the array of the token ids staked by the user
+     */
     function getTokenIfUnbonding(address user, uint256 tokenId) external view returns (bool) {
         return stakes[user].stateData[tokenId].isUnbonding;
     }
 
+    /**
+     * @dev The function is used to get the total number of tokens staked by a user
+     * @param user the address of the user
+     * @return the array of the token ids staked by the user
+     */
     function getStakeBlockNumberOfToken(address user, uint256 tokenId) external view returns (uint256) {
         return stakes[user].stateData[tokenId].DepositTime;
     }
 
+    /**
+     * @dev The function is used to get the total number of tokens staked by a user
+     * @param user the address of the user
+     * @return the array of the token ids staked by the user
+     */
     function getWithdrawTimeOfSTakedToken(address user, uint256 tokenId) external view returns (uint256) {
         return stakes[user].stateData[tokenId].withDrawnTime;
     }

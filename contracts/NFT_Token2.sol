@@ -11,7 +11,7 @@ contract NFTToken2 is ERC721 {
     }
 
     function _baseURI() internal pure override returns (string memory) {
-        return "TOKEN1";
+        return "TOKEN2";
     }
 
 }
