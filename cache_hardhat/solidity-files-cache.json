@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "/Users/pranavlakkadi/Downloads/test/assignment_DZAP_Solc/contracts/NFT_Staking.sol": {
-      "lastModificationDate": 1724242117509,
-      "contentHash": "2fd8d30e165691e38a186d5d274174d3",
+      "lastModificationDate": 1724408912720,
+      "contentHash": "f7cba9cc3e46728a29284022e4d8090d",
       "sourceName": "contracts/NFT_Staking.sol",
       "solcConfig": {
         "version": "0.8.25",
@@ -45,7 +45,7 @@
         "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol"
       ],
       "versionPragmas": [
-        "^0.8.0"
+        "^0.8.25"
       ],
       "artifacts": [
         "NFTStaking"
@@ -1443,8 +1443,8 @@
       ]
     },
     "/Users/pranavlakkadi/Downloads/test/assignment_DZAP_Solc/contracts/NFT_Token2.sol": {
-      "lastModificationDate": 1724243040974,
-      "contentHash": "242170bcc6beea20bcf59bd08a85168a",
+      "lastModificationDate": 1724357282645,
+      "contentHash": "33ad30b611e476d6ebf08c0ba9ec206f",
       "sourceName": "contracts/NFT_Token2.sol",
       "solcConfig": {
         "version": "0.8.25",
@@ -1488,8 +1488,8 @@
       ]
     },
     "/Users/pranavlakkadi/Downloads/test/assignment_DZAP_Solc/contracts/NFT_Token1.sol": {
-      "lastModificationDate": 1724242117518,
-      "contentHash": "ecd023eda4364e90307391c9dd588759",
+      "lastModificationDate": 1724350993503,
+      "contentHash": "673cdfc1af97fffbc797e0ba19b896e4",
       "sourceName": "contracts/NFT_Token1.sol",
       "solcConfig": {
         "version": "0.8.25",
@@ -1526,7 +1526,7 @@
         "@openzeppelin/contracts/token/ERC721/ERC721.sol"
       ],
       "versionPragmas": [
-        "^0.8.20"
+        "^0.8.25"
       ],
       "artifacts": [
         "NFTToken1"
