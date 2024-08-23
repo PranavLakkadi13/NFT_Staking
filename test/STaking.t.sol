@@ -445,6 +445,45 @@ contract STakingTest is Test {
     }
 
 
+    function testShouldRevertWhenWithdrawingBeforeDelay() public {
+        vm.startPrank(owner);
+        uint256[] memory tokenIds = new uint256[](3);
+        tokenIds[0] = 0;
+        tokenIds[1] = 1;
+        tokenIds[2] = 2;
+        staking.stake_Multiple_Tokens(address(nftToken1), tokenIds);
+        staking.unstake_single_token(0);
+        staking.unstake_single_token(1);
+        uint256[] memory tokenIds2 = new uint256[](1);
+        tokenIds2[0] = 0;
+        vm.roll(1200);
+        vm.expectEmit(true, true, false, false);
+        emit WithdrawNFTs(owner, 0);
+        staking.withdrawNFTs(tokenIds2);
+        // vm.expectRevert();
+        staking.claimRewards();
+        vm.stopPrank();
+    }
+
+
+    function testShouldRevertWhenTokensareNotWIthdrawn() public {
+        vm.startPrank(owner);
+        uint256[] memory tokenIds = new uint256[](3);
+        tokenIds[0] = 0;
+        tokenIds[1] = 1;
+        tokenIds[2] = 2;
+        staking.stake_Multiple_Tokens(address(nftToken1), tokenIds);
+        staking.unstake_single_token(0);
+        staking.unstake_single_token(1);
+        uint256[] memory tokenIds2 = new uint256[](1);
+        tokenIds2[0] = 0;
+        vm.roll(1200);
+        vm.expectRevert();
+        staking.claimRewards();
+        vm.stopPrank();
+    }
+
+
 
     function testProxyImplememtation() public {
         staking = new NFTStaking();
