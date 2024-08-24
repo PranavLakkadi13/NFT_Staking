@@ -511,8 +511,8 @@ contract STakingTest is Test {
             address(rewardToken),
             address(nftToken1),
             1e10,
-            10000,
-            10000
+            1,
+            1
         );
         ERC1967Proxy proxy = new ERC1967Proxy(address(staking), data);
         staking = NFTStaking(address(proxy));

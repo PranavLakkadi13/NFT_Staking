@@ -60,6 +60,8 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
     error NFTStaking__IncorrectTokenIdToWithdraw(uint256 tokenId);
     error NFTStaking__IncorrectWithdrawOfAlreadyUnstakedToken(uint256 tokenId);
     error NFTStaking__NoRewardsToCliam();
+    error NFTStaking__IncorrectTokenIdToWithdrawStillUnbonding(uint256 tokenId);
+    error NFTStaking__IncorrectTokenIdToWithdrawUnbondingBlockNumberIsInFuture(uint256 tokenId);
 
     ///////////////////////////////////////////////////////////////////////
     /////////////////  Events   ///////////////////////////////////////////
@@ -199,11 +201,11 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
             revert NFTStaking__InvalidArraySize();
         }
         if (userStake.stateData[tempValu].isUnbonding == false) {
-            revert NFTStaking__IncorrectTokenIdToWithdraw(tokenIds[0]);
+            revert NFTStaking__IncorrectTokenIdToWithdrawStillUnbonding(tokenIds[0]);
         }
 
         if (userStake.stateData[tempValu].unBondingBlockNumber >= block.number) {
-            revert NFTStaking__IncorrectTokenIdToWithdraw(tokenIds[0]);
+            revert NFTStaking__IncorrectTokenIdToWithdrawUnbondingBlockNumberIsInFuture(userStake.stateData[tempValu].unBondingBlockNumber);
         }
 
         s_nftToken.transferFrom(address(this), msg.sender, tempValu);
@@ -251,13 +253,13 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
         returns (uint256 reward)
     {
         Stake storage userStake = stakes[user];
-        uint256 length = RewardData.length;
+        uint256 length = RewardData.length - 1;
         uint256 start_time = userStake.stateData[tokenId].RewardTrackerBlock;
-        if (length == 1) {
+        if (length == 0) {
             reward += s_rewards.rewards[RewardData[0]].rewarddata * (block.number - start_time);
             return reward;
         }
-        for (uint256 i = 0; i < length - 1; i++) {
+        for (uint256 i = 0; i < length; i++) {
             uint256 v1 = s_rewards.rewards[i].blockNumberOfRewardUpdate;
             uint256 v2 = s_rewards.rewards[i + 1].blockNumberOfRewardUpdate;
             reward = (v2 - v1) * s_rewards.rewards[RewardData[i]].rewarddata;
@@ -361,8 +363,7 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
      * @return the reward per block
      */
     function getRewardPerBlockRecent() external view returns (uint256) {
-        Rewards storage rewards = s_rewards;
-        return rewards.rewards[rewards.updateCounter].rewarddata;
+        return s_rewards.rewards[s_rewards.updateCounter].rewarddata;
     }
 
     /**
@@ -434,27 +435,43 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
         return s_rewards.updateCounter;
     }
 
+    function getClaimRewardsOfUser(address user) external view returns (uint256) {
+        return stakes[user].claimRewards;
+    }
+
+    function getClaimRewardBlockNumberOfToken(address user, uint256 tokenId) external view returns (uint256) {
+        return stakes[user].stateData[tokenId].claimRewardBlockNumber;
+    }
+
+    function getRewardUpdateData(uint256 index) external view returns (uint256, uint256) {
+        return (s_rewards.rewards[index].rewarddata, s_rewards.rewards[index].blockNumberOfRewardUpdate);
+    }
+
+    /**
+     * @dev This is function is used to see how many times the rewards have been updated during the token stake period 
+     * @param user The address of the user who staked the NFT 
+     * @param tokenId The TokenID of the NFT
+     */
     function getRewardCounterOfToken(address user, uint256 tokenId) external view returns (uint256[] memory temp) {
         uint256 length = s_rewards.updateCounter;
+
         uint256 tempval;
-        uint256 count;
+        uint256 count = 1;
+
         uint256[] memory rewardCounter = new uint256[](length);
         for (uint256 i = 0; i < length; i++) {
             if (s_rewards.rewards[i].blockNumberOfRewardUpdate > stakes[user].stateData[tokenId].RewardTrackerBlock) {
-                rewardCounter[i] = s_rewards.rewards[i].rewarddata;
-                if (count == 0) {
-                    tempval = i;
-                }
+                rewardCounter[count] = i;
                 count++;
             }
         }
-        count++;
         temp = new uint256[](count);
         if (count == 1) {
             temp[0] = tempval;
         } else {
+            temp[0] = count;
             for (uint256 i = 0; i < count; i++) {
-                temp[i + 1] = rewardCounter[i];
+                temp[i] = rewardCounter[i];
             }
         }
     }
