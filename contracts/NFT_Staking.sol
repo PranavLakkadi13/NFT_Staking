@@ -266,8 +266,9 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
         }
         reward += s_rewards.rewards[RewardData[length]].rewarddata
             * (block.number - s_rewards.rewards[RewardData[length]].blockNumberOfRewardUpdate);
+        
         reward += s_rewards.rewards[RewardData[0]].rewarddata
-            * (s_rewards.rewards[RewardData[1]].blockNumberOfRewardUpdate - start_time);
+            * (s_rewards.rewards[RewardData[0]].blockNumberOfRewardUpdate - start_time);
     }
 
     ///////////////////////////////////////////////////////////////////////

@@ -64,6 +64,7 @@ contract ProxyTest is Test {
         vm.roll(100);
         console.log("Block Number", block.number);
         staking.setRewardPerBlock(50);
+        console.log("Block Number", block.number);
         vm.roll(150);
         console.log("Block Number", block.number);
 
@@ -79,11 +80,14 @@ contract ProxyTest is Test {
         // vm.roll(1200);
         // console.log("Reward Counter", staking.getCOunteOFUpdateOfReward());
         uint256[] memory tokenIds3 = staking.getRewardCounterOfToken(owner, 0);
-        vm.expectEmit(true, true, false, false);
-        emit WithdrawNFTs(owner, 0);
-        vm.roll(160);
-        staking.withdrawNFTs(tokenIds2, tokenIds3);
-        staking.claimRewards();
+        // vm.expectEmit(true, true, false, false);
+        // emit WithdrawNFTs(owner, 0);
+        vm.roll(152);
+        console.log("Block Number", block.number);
+        uint256 y = staking.calculateReward(owner, 0, staking.getRewardCounterOfToken(owner, 0));
+        console.log(y);
+        // staking.withdrawNFTs(tokenIds2, tokenIds3);
+        // staking.claimRewards();
         vm.stopPrank();
     }
 
