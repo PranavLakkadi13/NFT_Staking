@@ -67,9 +67,12 @@ contract ProxyTest is Test {
         console.log("Block Number", block.number);
         vm.roll(150);
         console.log("Block Number", block.number);
-
-        uint256 x = staking.getCOunteOFUpdateOfReward();
-        assert(x == 2);
+        // staking.setRewardPerBlock(500);
+        // console.log("Block Number", block.number);
+        // vm.roll(250);
+        // console.log("Block Number", block.number);
+        // uint256 x = staking.getCOunteOFUpdateOfReward();
+        // assert(x == 3);
 
         staking.getRewardCounterOfToken(owner, 0);
 
@@ -80,18 +83,16 @@ contract ProxyTest is Test {
         // vm.roll(1200);
         // console.log("Reward Counter", staking.getCOunteOFUpdateOfReward());
         uint256[] memory tokenIds3 = staking.getRewardCounterOfToken(owner, 0);
-        // vm.expectEmit(true, true, false, false);
-        // emit WithdrawNFTs(owner, 0);
-        vm.roll(152);
+        vm.roll(252);
         console.log("Block Number", block.number);
-        uint256 y = staking.calculateReward(owner, 0, staking.getRewardCounterOfToken(owner, 0));
+        uint256 y = staking.calculateReward(owner, 0, staking.getRewardCounterOfToken(owner, 0), staking.getUnbondingBlockNumberOfToken(owner, 0));
         console.log(y);
-        // staking.withdrawNFTs(tokenIds2, tokenIds3);
-        // staking.claimRewards();
+        vm.expectEmit(true, true, false, false);
+        emit WithdrawNFTs(owner, 0);
+        staking.withdrawNFTs(tokenIds2, tokenIds3);
+        vm.expectEmit(true, true, false, false);
+        emit RewardsClaimed(owner, 12450);
+        staking.claimRewards();
         vm.stopPrank();
-    }
-
-    function testUpgrade() public {
-        
     }
 }

@@ -209,7 +209,7 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
         }
 
         s_nftToken.transferFrom(address(this), msg.sender, tempValu);
-        uint256 TheRewardsClaimable = calculateReward(msg.sender, tempValu, RewardData);
+        uint256 TheRewardsClaimable = calculateReward(msg.sender, tempValu, RewardData, userStake.stateData[tempValu].unBondingBlockNumber);
         userStake.claimRewards += TheRewardsClaimable;
         userStake.stateData[tempValu].claimRewards = TheRewardsClaimable;
         userStake.stateData[tempValu].claimRewardBlockNumber = block.number + s_rewardClaimDelay;
@@ -247,7 +247,7 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
         emit RewardsClaimed(msg.sender, reward);
     }
 
-    function calculateReward(address user, uint256 tokenId, uint256[] calldata RewardData)
+    function calculateReward(address user, uint256 tokenId, uint256[] calldata RewardData, uint256 lastRewardEarnTime)
         public
         view
         returns (uint256 reward)
@@ -256,7 +256,7 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
         uint256 length = RewardData.length - 1;
         uint256 start_time = userStake.stateData[tokenId].RewardTrackerBlock;
         if (length == 0) {
-            reward += s_rewards.rewards[RewardData[0]].rewarddata * (block.number - start_time);
+            reward += s_rewards.rewards[RewardData[0]].rewarddata * (lastRewardEarnTime - start_time);
             return reward;
         }
         for (uint256 i = 0; i < length; i++) {
@@ -265,7 +265,7 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
             reward = (v2 - v1) * s_rewards.rewards[RewardData[i]].rewarddata;
         }
         reward += s_rewards.rewards[RewardData[length]].rewarddata
-            * (block.number - s_rewards.rewards[RewardData[length]].blockNumberOfRewardUpdate);
+            * (lastRewardEarnTime - s_rewards.rewards[RewardData[length]].blockNumberOfRewardUpdate);
         
         reward += s_rewards.rewards[RewardData[0]].rewarddata
             * (s_rewards.rewards[RewardData[0]].blockNumberOfRewardUpdate - start_time);
