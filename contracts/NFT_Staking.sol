@@ -1,23 +1,32 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./RewardToken.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {RewardToken} from "./RewardToken.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, OwnableUpgradeable {
-
     ///////////////////////////////////////////////////////////////////////
     /////////////////  State Variables  ///////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
 
+    struct rewardData {
+        uint256 rewarddata;
+        uint256 blockNumberOfRewardUpdate;
+    }
+
+    struct Rewards {
+        mapping(uint256 updateCOunter => rewardData) rewards;
+        uint256 updateCounter;
+    }
+
     RewardToken private s_rewardToken;
     IERC721 private s_nftToken;
-    uint256 private s_rewardPerBlock;
+    Rewards private s_rewards;
     uint256 private s_unbondingPeriod;
     uint256 private s_rewardClaimDelay;
 
@@ -29,16 +38,16 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
         uint256 DepositTime;
         uint256 claimRewards;
         uint256 claimRewardBlockNumber;
+        uint256 RewardTrackerBlock;
     }
- 
+
     struct Stake {
         uint256[] tokenIds;
-        mapping(uint256  => data) stateData;
+        mapping(uint256 => data) stateData;
         uint256 claimRewards;
     }
 
     mapping(address user_address => Stake) private stakes;
-
 
     ///////////////////////////////////////////////////////////////////////
     /////////////////  Errors   ///////////////////////////////////////////
@@ -56,13 +65,10 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
     /////////////////  Events   ///////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
 
-
     event Staked(address indexed user, uint256 indexed tokenIds);
     event Unstaked(address indexed user, uint256 indexed tokenIds);
     event WithdrawNFTs(address indexed user, uint256 indexed tokenIds);
     event RewardsClaimed(address indexed user, uint256 indexed amount);
-
-
 
     ///////////////////////////////////////////////////////////////////////
     /////////////////  Constructor  ///////////////////////////////////////
@@ -81,12 +87,15 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
 
         s_nftToken = _nftToken;
         s_rewardToken = RewardToken(address(_rewardToken));
-        s_rewardPerBlock = _rewardPerBlock;
+
+        Rewards storage rewards = s_rewards;
+        rewards.rewards[rewards.updateCounter].rewarddata = _rewardPerBlock;
+        rewards.rewards[rewards.updateCounter].blockNumberOfRewardUpdate = block.number;
+        rewards.updateCounter++;
+
         s_unbondingPeriod = _unbondingPeriod;
         s_rewardClaimDelay = _rewardClaimDelay;
     }
-
-
 
     ///////////////////////////////////////////////////////////////////////
     /////////////////  Core Logic Functions  //////////////////////////////
@@ -108,17 +117,17 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
         if (userStake.stateData[tokenId].DepositTime > 0 && userStake.stateData[tokenId].isWithdrawn == false) {
             revert NFTStaking__AlreadyStaked();
         }
-        
+
         IERC721(nftContract).transferFrom(msg.sender, address(this), tokenId);
 
         userStake.tokenIds.push(tokenId);
         userStake.stateData[tokenId].DepositTime = block.number;
         userStake.stateData[tokenId].isWithdrawn = false;
         userStake.stateData[tokenId].isUnbonding = false;
+        userStake.stateData[tokenId].RewardTrackerBlock = block.number;
 
         emit Staked(msg.sender, tokenId);
     }
-
 
     /**
      * @dev The function is used to stake multiple tokens at once it internally calls the stake_single_token function
@@ -138,24 +147,21 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
         }
     }
 
-
     /**
      * @dev The function is used to unstake a single token
      * @param tokenId the token id to unstake
      * @notice The user can only unstake the token only if the contract is not paused
      */
     function unstake_single_token(uint256 tokenId) public whenNotPaused {
-        
         Stake storage userStake = stakes[msg.sender];
 
         if (userStake.stateData[tokenId].isUnbonding == true) {
             revert NFTStaking__IncorrectWithdrawOfAlreadyUnstakedToken(tokenId);
         }
-        
+
         if (userStake.stateData[tokenId].DepositTime == 0) {
             revert NFTStaking__IncorrectTokenIdToWithdraw(tokenId);
         }
-
 
         userStake.stateData[tokenId].isUnbonding = true;
         userStake.stateData[tokenId].unBondingBlockNumber = block.number + s_unbondingPeriod;
@@ -173,49 +179,45 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
         if (tokenIds.length == 0) {
             revert NFTStaking__InvalidArraySize();
         }
-        
+
         uint256 arrayLength = tokenIds.length;
         for (uint256 i = 0; i < arrayLength; i++) {
             unstake_single_token(tokenIds[i]);
         }
     }
 
-
     /**
      * @dev The function is used to withdraw a single token or multiple tokens
      * @param tokenIds the token id to withdraw or ids
-     * @notice The user can only withdraw the token only if the contract is not paused and is done unbounding 
+     * @notice The user can only withdraw the token only if the contract is not paused and is done unbounding
      */
-    function withdrawNFTs(uint256[] calldata tokenIds) external {
+    function withdrawNFTs(uint256[] calldata tokenIds, uint256[] calldata RewardData) external {
         Stake storage userStake = stakes[msg.sender];
+        uint256 tempValu = tokenIds[0];
 
         if (tokenIds.length == 0) {
             revert NFTStaking__InvalidArraySize();
         }
-
-        uint256 arrayLength = tokenIds.length;
-
-        for (uint256 i = 0; i < arrayLength; i++) {
-            if (userStake.stateData[tokenIds[i]].isUnbonding == false) {
-                revert NFTStaking__IncorrectTokenIdToWithdraw(tokenIds[i]);
-            }
-
-            if (userStake.stateData[tokenIds[i]].unBondingBlockNumber >= block.number) {
-                revert NFTStaking__IncorrectTokenIdToWithdraw(tokenIds[i]);
-            }
-
-            s_nftToken.transferFrom(address(this), msg.sender, tokenIds[i]);
-            userStake.claimRewards += _calculateReward(msg.sender, tokenIds[i]);
-            userStake.stateData[tokenIds[i]].claimRewards = _calculateReward(msg.sender, tokenIds[i]);
-            userStake.stateData[tokenIds[i]].claimRewardBlockNumber = block.number + s_rewardClaimDelay;
-            userStake.stateData[tokenIds[i]].isWithdrawn = true;
-            userStake.stateData[tokenIds[i]].isUnbonding = false;
-            userStake.stateData[tokenIds[i]].unBondingBlockNumber = 0;
-            userStake.stateData[tokenIds[i]].UnstakeTime = 0;
-            userStake.stateData[tokenIds[i]].DepositTime = 0;
-
-            emit WithdrawNFTs(msg.sender,tokenIds[i]);
+        if (userStake.stateData[tempValu].isUnbonding == false) {
+            revert NFTStaking__IncorrectTokenIdToWithdraw(tokenIds[0]);
         }
+
+        if (userStake.stateData[tempValu].unBondingBlockNumber >= block.number) {
+            revert NFTStaking__IncorrectTokenIdToWithdraw(tokenIds[0]);
+        }
+
+        s_nftToken.transferFrom(address(this), msg.sender, tempValu);
+        uint256 TheRewardsClaimable = calculateReward(msg.sender, tempValu, RewardData);
+        userStake.claimRewards += TheRewardsClaimable;
+        userStake.stateData[tempValu].claimRewards = TheRewardsClaimable;
+        userStake.stateData[tempValu].claimRewardBlockNumber = block.number + s_rewardClaimDelay;
+        userStake.stateData[tempValu].isWithdrawn = true;
+        userStake.stateData[tempValu].isUnbonding = false;
+        userStake.stateData[tempValu].unBondingBlockNumber = 0;
+        userStake.stateData[tempValu].UnstakeTime = 0;
+        userStake.stateData[tempValu].DepositTime = 0;
+
+        emit WithdrawNFTs(msg.sender, tokenIds[0]);
     }
 
     function claimRewards() external whenNotPaused {
@@ -227,15 +229,15 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
         }
 
         uint256 arrayLength = userStake.tokenIds.length;
-        
-        for(uint256 i = 0; i < arrayLength; i++) {
+
+        for (uint256 i = 0; i < arrayLength; i++) {
             if (userStake.stateData[userStake.tokenIds[i]].claimRewardBlockNumber >= block.number) {
                 reward += userStake.stateData[userStake.tokenIds[i]].claimRewards;
                 userStake.stateData[userStake.tokenIds[i]].claimRewards = 0;
                 userStake.stateData[userStake.tokenIds[i]].claimRewardBlockNumber = 0;
             }
         }
-        
+
         userStake.claimRewards - reward;
 
         s_rewardToken.mint(msg.sender, reward);
@@ -243,22 +245,35 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
         emit RewardsClaimed(msg.sender, reward);
     }
 
-    function _calculateReward(address user, uint256 tokenId) internal view returns (uint256 reward) {
+    function calculateReward(address user, uint256 tokenId, uint256[] calldata RewardData)
+        public
+        view
+        returns (uint256 reward)
+    {
         Stake storage userStake = stakes[user];
-        
-        uint256 endTime = userStake.stateData[tokenId].unBondingBlockNumber;
-        uint256 startTime = userStake.stateData[tokenId].DepositTime;
-
-        uint256 Duration = endTime - startTime;
-        reward = Duration * s_rewardPerBlock;
+        uint256 length = RewardData.length;
+        uint256 start_time = userStake.stateData[tokenId].RewardTrackerBlock;
+        if (length == 1) {
+            reward += s_rewards.rewards[RewardData[0]].rewarddata * (block.number - start_time);
+            return reward;
+        }
+        for (uint256 i = 0; i < length - 1; i++) {
+            uint256 v1 = s_rewards.rewards[i].blockNumberOfRewardUpdate;
+            uint256 v2 = s_rewards.rewards[i + 1].blockNumberOfRewardUpdate;
+            reward = (v2 - v1) * s_rewards.rewards[RewardData[i]].rewarddata;
+        }
+        reward += s_rewards.rewards[RewardData[length]].rewarddata
+            * (block.number - s_rewards.rewards[RewardData[length]].blockNumberOfRewardUpdate);
+        reward += s_rewards.rewards[RewardData[0]].rewarddata
+            * (s_rewards.rewards[RewardData[1]].blockNumberOfRewardUpdate - start_time);
     }
 
     ///////////////////////////////////////////////////////////////////////
     /////////////////  Only Owner Functions  //////////////////////////////
     ///////////////////////////////////////////////////////////////////////
- 
+
     /**
-     * @dev The function is used to upgrade the contract The addressed in stored a predetermined location to prevent any possible 
+     * @dev The function is used to upgrade the contract The addressed in stored a predetermined location to prevent any possible
      *      storage collision as per EIP1967 standard
      * @param newImplementation the address of the new implementation
      * @notice Only the owner can call this function
@@ -271,7 +286,10 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
      * @notice Only the owner can call this function
      */
     function setRewardPerBlock(uint256 _rewardPerBlock) external onlyOwner {
-        s_rewardPerBlock = _rewardPerBlock;
+        Rewards storage rewards = s_rewards;
+        rewards.rewards[rewards.updateCounter].rewarddata = _rewardPerBlock;
+        rewards.rewards[rewards.updateCounter].blockNumberOfRewardUpdate = block.number;
+        rewards.updateCounter++;
     }
 
     /**
@@ -302,7 +320,7 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
     }
 
     /**
-     * @dev This function is used to Pause the contract since it is upgreadable it is stored in a predetermined locaton to prevent 
+     * @dev This function is used to Pause the contract since it is upgreadable it is stored in a predetermined locaton to prevent
      *      any possible storage collsion with the new implementation
      * @notice Only the owner can call this function
      */
@@ -311,13 +329,12 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
     }
 
     /**
-     * @dev This function is used to Unpause the contract 
+     * @dev This function is used to Unpause the contract
      * @notice Only the owner can call this function
      */
     function unpause() external onlyOwner {
         _unpause();
     }
-
 
     ///////////////////////////////////////////////////////////////////////
     /////////////////  Getter Functions  /////////////////////////////////
@@ -343,8 +360,9 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
      * @dev The function is used to get the reward per block
      * @return the reward per block
      */
-    function getRewardPerBlock() external view returns (uint256) {
-        return s_rewardPerBlock;
+    function getRewardPerBlockRecent() external view returns (uint256) {
+        Rewards storage rewards = s_rewards;
+        return rewards.rewards[rewards.updateCounter].rewarddata;
     }
 
     /**
@@ -411,5 +429,33 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
     function getUnbondingBlockNumberOfToken(address user, uint256 tokenId) external view returns (uint256) {
         return stakes[user].stateData[tokenId].unBondingBlockNumber;
     }
-}
 
+    function getCOunteOFUpdateOfReward() external view returns (uint256) {
+        return s_rewards.updateCounter;
+    }
+
+    function getRewardCounterOfToken(address user, uint256 tokenId) external view returns (uint256[] memory temp) {
+        uint256 length = s_rewards.updateCounter;
+        uint256 tempval;
+        uint256 count;
+        uint256[] memory rewardCounter = new uint256[](length);
+        for (uint256 i = 0; i < length; i++) {
+            if (s_rewards.rewards[i].blockNumberOfRewardUpdate > stakes[user].stateData[tokenId].RewardTrackerBlock) {
+                rewardCounter[i] = s_rewards.rewards[i].rewarddata;
+                if (count == 0) {
+                    tempval = i;
+                }
+                count++;
+            }
+        }
+        count++;
+        temp = new uint256[](count);
+        if (count == 1) {
+            temp[0] = tempval;
+        } else {
+            for (uint256 i = 0; i < count; i++) {
+                temp[i + 1] = rewardCounter[i];
+            }
+        }
+    }
+}
