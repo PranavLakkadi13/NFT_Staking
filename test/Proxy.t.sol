@@ -31,6 +31,7 @@ contract ProxyTest is Test {
         nftToken1 = new NFTToken1();
         nftToken2 = new NFTToken2();
         staking = new NFTStaking();
+        // staking.initialize(address(rewardToken), IERC721(address(nftToken1)), 100, 1, 1);
         bytes memory data = abi.encodeWithSignature(
             "initialize(address,address,uint256,uint256,uint256)",
             address(rewardToken),
@@ -93,6 +94,48 @@ contract ProxyTest is Test {
         vm.expectEmit(true, true, false, false);
         emit RewardsClaimed(owner, 12450);
         staking.claimRewards();
+        vm.stopPrank();
+    }
+
+    function testUpdate() public {
+        vm.startPrank(owner);
+        uint256[] memory tokenIds = new uint256[](3);
+        tokenIds[0] = 0;
+        tokenIds[1] = 1;
+        tokenIds[2] = 2;
+        staking.stake_Multiple_Tokens(address(nftToken1), tokenIds);
+        staking.pause();
+        vm.roll(1000);
+
+        NFTStaking newImpl = new NFTStaking();
+        newImpl.initialize(address(rewardToken), IERC721(nftToken1), 10, 10, 10);
+        bytes memory data = abi.encodeWithSignature(
+            "initialize(address,address,uint256,uint256,uint256)",
+            address(rewardToken),
+            address(nftToken1),
+            100,
+            1,
+            1
+        );
+        // ERC1967Proxy proxy = new ERC1967Proxy(address(newImpl), data);
+        // staking.upgradeToAndCall(address(newImpl), data);
+        staking.upgradeToAndCall(address(newImpl), "");
+        // staking.initialize(address(rewardToken), IERC721(nftToken1), 10, 10, 10);
+        // staking = NFTStaking(address(proxy));
+        uint256[] memory tokenIds2 = new uint256[](1);
+        tokenIds2[0] = 0;
+        staking.unpause();
+        staking.unstake_single_token(0);
+        staking.getTokenIfUnbonding(owner, 0);  
+        staking.getRewardUpdateData(1);
+        staking.getRewardPerBlockRecent();
+        
+        // staking.unstake_single_token(0);
+
+        // uint256[] memory tokenIds2 = new uint256[](1);
+        // tokenIds2[0] = 0;
+        // console.log("Current blocknumber ", block.number);
+        // staking.withdrawNFTs(tokenIds2, staking.getRewardCounterOfToken(owner, 0));
         vm.stopPrank();
     }
 }

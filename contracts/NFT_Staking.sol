@@ -53,7 +53,7 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
     /////////////////  Errors   ///////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
 
-    error NFTStaking__IncorrectNFTToken();
+    error NFTStaking__IncorrectNFTToken(uint256 tokenId);
     error NFTStaking__IncorrectTokenIdToStake();
     error NFTStaking__InvalidArraySize();
     error NFTStaking__AlreadyStaked();
@@ -111,7 +111,7 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
      */
     function stake_single_token(address nftContract, uint256 tokenId) public whenNotPaused {
         if (nftContract != address(s_nftToken)) {
-            revert NFTStaking__IncorrectNFTToken();
+            revert NFTStaking__IncorrectNFTToken(tokenId);
         }
 
         Stake storage userStake = stakes[msg.sender];
@@ -122,7 +122,10 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
 
         IERC721(nftContract).transferFrom(msg.sender, address(this), tokenId);
 
-        userStake.tokenIds.push(tokenId);
+        if (userStake.stateData[tokenId].RewardTrackerBlock == 0)
+        {
+            userStake.tokenIds.push(tokenId);
+        }
         userStake.stateData[tokenId].DepositTime = block.number;
         userStake.stateData[tokenId].isWithdrawn = false;
         userStake.stateData[tokenId].isUnbonding = false;
@@ -211,7 +214,7 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
         s_nftToken.transferFrom(address(this), msg.sender, tempValu);
         uint256 TheRewardsClaimable = calculateReward(msg.sender, tempValu, RewardData, userStake.stateData[tempValu].unBondingBlockNumber);
         userStake.claimRewards += TheRewardsClaimable;
-        userStake.stateData[tempValu].claimRewards = TheRewardsClaimable;
+        userStake.stateData[tempValu].claimRewards += TheRewardsClaimable;
         userStake.stateData[tempValu].claimRewardBlockNumber = block.number + s_rewardClaimDelay;
         userStake.stateData[tempValu].isWithdrawn = true;
         userStake.stateData[tempValu].isUnbonding = false;
@@ -237,6 +240,7 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
                 reward += userStake.stateData[userStake.tokenIds[i]].claimRewards;
                 userStake.stateData[userStake.tokenIds[i]].claimRewards = 0;
                 userStake.stateData[userStake.tokenIds[i]].claimRewardBlockNumber = 0;
+                userStake.stateData[userStake.tokenIds[i]].RewardTrackerBlock = block.number;
             }
         }
 
