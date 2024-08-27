@@ -169,7 +169,9 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
         }
 
         userStake.stateData[tokenId].isUnbonding = true;
+        unchecked {
         userStake.stateData[tokenId].unBondingBlockNumber = block.number + s_unbondingPeriod;
+        }
         userStake.stateData[tokenId].UnstakeTime = block.number;
 
         emit Unstaked(msg.sender, tokenId);
@@ -213,9 +215,11 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
 
         s_nftToken.transferFrom(address(this), msg.sender, tempValu);
         uint256 TheRewardsClaimable = calculateReward(msg.sender, tempValu, RewardData, userStake.stateData[tempValu].unBondingBlockNumber);
+        unchecked {
         userStake.claimRewards += TheRewardsClaimable;
         userStake.stateData[tempValu].claimRewards += TheRewardsClaimable;
         userStake.stateData[tempValu].claimRewardBlockNumber = block.number + s_rewardClaimDelay;
+        }
         userStake.stateData[tempValu].isWithdrawn = true;
         userStake.stateData[tempValu].isUnbonding = false;
         userStake.stateData[tempValu].unBondingBlockNumber = 0;
@@ -268,11 +272,13 @@ contract NFTStaking is Initializable, UUPSUpgradeable, PausableUpgradeable, Owna
             uint256 v2 = s_rewards.rewards[i + 1].blockNumberOfRewardUpdate;
             reward = (v2 - v1) * s_rewards.rewards[RewardData[i]].rewarddata;
         }
+        unchecked {
         reward += s_rewards.rewards[RewardData[length]].rewarddata
             * (lastRewardEarnTime - s_rewards.rewards[RewardData[length]].blockNumberOfRewardUpdate);
         
         reward += s_rewards.rewards[RewardData[0]].rewarddata
             * (s_rewards.rewards[RewardData[0]].blockNumberOfRewardUpdate - start_time);
+        }
     }
 
     ///////////////////////////////////////////////////////////////////////
